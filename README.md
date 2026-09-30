@@ -227,3 +227,5 @@ Gastranom/
 ├── run-all.js                    # Concurrent runner
 └── package.json                  # Root runner scripts
 ```
+#   g a s t r a n o m  
+ 
