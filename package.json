@@ -1,0 +1,23 @@
+{
+  "name": "gastranom",
+  "version": "1.0.0",
+  "description": "Production E-commerce Platform - Gastranom",
+  "type": "module",
+  "scripts": {
+    "start": "node run-all.js",
+    "dev": "node run-all.js",
+    "seed": "npm --prefix server run seed",
+    "server": "npm --prefix server start",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build"
+  },
+  "keywords": [
+    "ecommerce",
+    "supermarket",
+    "react",
+    "express",
+    "sqlite"
+  ],
+  "author": "Gastranom Team",
+  "license": "ISC"
+}
