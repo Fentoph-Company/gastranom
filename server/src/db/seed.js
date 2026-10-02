@@ -59,7 +59,7 @@ const seedTx = db.transaction(() => {
       instagram: 'https://instagram.com/gastronom_khiva',
       facebook: 'https://facebook.com/gastronom_khiva'
     },
-    telegram_bot_token: '',
+    telegram_bot_token: '8857592268:AAGiB4PXMWli-Ag6s-LfBhK_hHeC4YQHWQE',
     telegram_chat_id: '',
     telegram_enabled: 1,
     online_payment_configured: 0,
@@ -595,5 +595,19 @@ const seedTx = db.transaction(() => {
   `).run(adminId);
 });
 
-seedTx();
-console.log('Successfully seeded database with Gastronom Khiva commercial data!');
+export function seedDatabase(force = false) {
+  if (!force) {
+    try {
+      const existing = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get();
+      if (existing && existing.count > 0) {
+        return;
+      }
+    } catch {}
+  }
+  seedTx();
+  console.log('Successfully seeded database with Gastronom Khiva commercial data!');
+}
+
+if (process.argv[1] && process.argv[1].endsWith('seed.js')) {
+  seedDatabase(true);
+}

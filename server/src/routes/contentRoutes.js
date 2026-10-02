@@ -169,11 +169,21 @@ router.post('/test-telegram', requireAdmin, async (req, res) => {
 
     if (!token) {
       const row = db.prepare("SELECT value FROM settings WHERE key = 'telegram_bot_token'").get();
-      if (row) token = row.value;
+      if (row && row.value) {
+        try { token = JSON.parse(row.value); } catch { token = row.value; }
+      }
+      if (!token) {
+        token = process.env.TELEGRAM_BOT_TOKEN || '8857592268:AAGiB4PXMWli-Ag6s-LfBhK_hHeC4YQHWQE';
+      }
     }
     if (!targetChat) {
       const row = db.prepare("SELECT value FROM settings WHERE key = 'telegram_chat_id'").get();
-      if (row) targetChat = row.value;
+      if (row && row.value) {
+        try { targetChat = JSON.parse(row.value); } catch { targetChat = row.value; }
+      }
+      if (!targetChat) {
+        targetChat = process.env.TELEGRAM_CHAT_ID;
+      }
     }
 
     if (!token || !targetChat) {

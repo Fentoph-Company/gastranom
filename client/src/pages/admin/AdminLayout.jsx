@@ -16,7 +16,8 @@ import {
   Bell,
   ChevronRight,
   Menu,
-  X
+  X,
+  Server
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -38,6 +39,7 @@ export default function AdminLayout({ activePage, setActivePage, onNavigateToSto
     { id: 'banners', label: 'Bannerlar & CMS', icon: Image },
     { id: 'audit-logs', label: 'Audit Jurnali', icon: History },
     { id: 'settings', label: 'Do‘kon Sozlamalari', icon: Settings },
+    { id: 'system', label: 'Tizim (Backend API)', icon: Server },
   ];
 
   return (

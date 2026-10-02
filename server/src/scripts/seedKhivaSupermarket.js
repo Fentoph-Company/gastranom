@@ -57,7 +57,7 @@ const seedTx = db.transaction(() => {
     },
     maps_url: 'https://yandex.uz/maps/?pt=60.355998,41.381527&z=17&l=map',
     google_maps_url: 'https://www.google.com/maps/search/?api=1&query=41.381527,60.355998',
-    telegram_bot_token: '',
+    telegram_bot_token: '8857592268:AAGiB4PXMWli-Ag6s-LfBhK_hHeC4YQHWQE',
     telegram_chat_id: '',
     telegram_notifications_enabled: true,
     sms_notifications_enabled: false,

@@ -1,10 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Image, Plus, Trash2, Edit2, Save, X, MapPin, ExternalLink, Send } from 'lucide-react';
+import { Settings, Image, Plus, Trash2, Edit2, Save, X, MapPin, ExternalLink, Send, Server, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
-export default function AdminSettings() {
-  const [activeTab, setActiveTab] = useState('settings'); // 'settings' or 'banners'
+export default function AdminSettings({ initialTab = 'settings' }) {
+  const [activeTab, setActiveTab] = useState(initialTab); // 'settings', 'banners', 'tizim'
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (activeTab === 'tizim') {
+      handlePingBackends();
+    }
+  }, [activeTab]);
   const [settings, setSettings] = useState({
     store_name: '',
     store_tagline: '',
@@ -28,6 +40,13 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
+
+  // Multi-backend management state
+  const [backendList, setBackendList] = useState(api.backends.getCandidates());
+  const [activeBackend, setActiveBackend] = useState(api.backends.getActive());
+  const [pingResults, setPingResults] = useState({});
+  const [pinging, setPinging] = useState(false);
+  const [newBackendUrl, setNewBackendUrl] = useState('');
 
   // Banner Modal
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
@@ -98,6 +117,105 @@ export default function AdminSettings() {
     } finally {
       setTestingTelegram(false);
     }
+  };
+
+  const handlePingBackends = async () => {
+    setPinging(true);
+    try {
+      const results = await api.backends.pingAll(5000);
+      const map = {};
+      results.forEach((r) => {
+        map[r.url] = r;
+      });
+      setPingResults(map);
+      showToast('Backend serverlar holati tekshirildi!');
+    } catch (e) {
+      showToast('Tekshirishda xatolik yuz berdi', 'error');
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  const handleSelectBackend = (url) => {
+    api.backends.setActive(url);
+    setActiveBackend(url);
+    showToast(`Faol backend server tanlandi: ${url}`);
+  };
+
+  const handlePingSingle = async (url) => {
+    setPinging(true);
+    try {
+      const res = await api.backends.ping(url, 5000);
+      setPingResults((prev) => ({ ...prev, [url]: res }));
+      if (res.ok) {
+        showToast(`${url} ishlayapti (${res.duration}ms)!`);
+      } else {
+        showToast(`${url} javob bermadi (${res.error || res.status})`, 'error');
+      }
+    } catch {
+      showToast('Tekshirib bo‘lmadi', 'error');
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  const handleSaveAndActivateBackend = async (e) => {
+    if (e) e.preventDefault();
+    if (!newBackendUrl.trim()) {
+      showToast("Iltimos, avval backend API manzilini kiriting yoki joylang (Paste)!", "warning");
+      return;
+    }
+    let url = newBackendUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    url = url.replace(/\/$/, '');
+
+    setPinging(true);
+    showToast("Server bilan aloqa tekshirilmoqda...", "info");
+    const ping = await api.backends.ping(url, 5000);
+    setPinging(false);
+
+    api.backends.addCustom(url, true);
+    setBackendList(api.backends.getCandidates());
+    setActiveBackend(url);
+    setNewBackendUrl('');
+
+    if (ping.ok) {
+      showToast(`✅ Yangi backend API muvaffaqiyatli ulandi va faollashtirildi! (${ping.duration}ms)`, 'success');
+    } else {
+      showToast(`⚠️ Backend URL faol qilindi, lekin server hozircha javob bermadi (${ping.error || ping.status}). Avtomatik zaxiraga o'tish faol.`, 'warning');
+    }
+    handlePingBackends();
+  };
+
+  const handleRemoveCustomBackend = (url) => {
+    api.backends.removeCustom(url);
+    setBackendList(api.backends.getCandidates());
+    setActiveBackend(api.backends.getActive());
+    showToast(`Backend server ro'yxatdan o'chirildi: ${url}`);
+  };
+
+  const handleResetBackends = () => {
+    if (!window.confirm("Barcha kiritilgan backend manzillarini tozalab, asl 'https://gastranom.onrender.com' holatiga qaytarishni xohlaysizmi?")) return;
+    api.backends.resetToDefault();
+    setBackendList(api.backends.getCandidates());
+    setActiveBackend(api.backends.getActive());
+    showToast("Backend manzillari zavod holatiga qaytarildi!");
+    handlePingBackends();
+  };
+
+  const handleAddBackend = (e) => {
+    if (e) e.preventDefault();
+    if (!newBackendUrl.trim()) return;
+    let url = newBackendUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    api.backends.addCustom(url);
+    setBackendList(api.backends.getCandidates());
+    setNewBackendUrl('');
+    showToast(`Yangi backend server zaxiraga qo'shildi: ${url}`);
   };
 
   const handleOpenBannerModal = (b = null) => {
@@ -205,6 +323,21 @@ export default function AdminSettings() {
           }}
         >
           <Image size={16} /> Bosh Sahifa Bannerlari ({banners.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('tizim')}
+          style={{
+            padding: '0.75rem 1.25rem',
+            fontWeight: '700',
+            fontSize: '0.9rem',
+            color: activeTab === 'tizim' ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'tizim' ? '3px solid var(--primary)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}
+        >
+          <Server size={16} /> Tizim (Backend API)
         </button>
       </div>
 
@@ -437,6 +570,138 @@ export default function AdminSettings() {
                     />
                   </div>
                 </div>
+
+                {/* Section 6: Multi-Backend URLs */}
+                <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Server size={18} color="var(--primary)" />
+                        <span>Multi-Backend URL Sozlamalari (Failover & Switcher)</span>
+                      </h4>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
+                        Bir nechta backend manzillar (Render, Localhost va zaxira). Birlamchi server javob bermasa, avtomatik keyingisiga ulanadi.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handlePingBackends}
+                        disabled={pinging}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
+                      >
+                        <RefreshCw size={14} className={pinging ? 'spin' : ''} /> {pinging ? 'Tekshirilmoqda...' : 'Serverlarni tekshirish'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Candidate URLs list */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
+                    {backendList.map((url) => {
+                      const isActive = activeBackend === url;
+                      const ping = pingResults[url];
+                      return (
+                        <div
+                          key={url}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            border: isActive ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                            backgroundColor: isActive ? 'rgba(34, 197, 94, 0.05)' : 'var(--bg-secondary)',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <input
+                              type="radio"
+                              name="activeBackend"
+                              checked={isActive}
+                              onChange={() => handleSelectBackend(url)}
+                              style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span>{url}</span>
+                                {isActive && (
+                                  <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '12px', background: 'var(--primary)', color: '#fff', fontWeight: 600 }}>
+                                    FAOL
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {url.includes('onrender.com') ? 'Cloud (Render Production API)' : url.includes('localhost') ? 'Local Dev Server (5000)' : 'Zaxira Backend'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            {ping && (
+                              <span
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: ping.ok ? '#dcfce7' : '#fee2e2',
+                                  color: ping.ok ? '#15803d' : '#b91c1c',
+                                  fontWeight: 500
+                                }}
+                              >
+                                {ping.ok ? (
+                                  <>
+                                    <CheckCircle2 size={12} /> {ping.duration}ms (Online)
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertCircle size={12} /> Aloqa yo‘q
+                                  </>
+                                )}
+                              </span>
+                            )}
+
+                            {!isActive && (
+                              <button
+                                type="button"
+                                onClick={() => handleSelectBackend(url)}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                              >
+                                Ulanish
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add custom backend input */}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="url"
+                      value={newBackendUrl}
+                      onChange={(e) => setNewBackendUrl(e.target.value)}
+                      placeholder="Yangi backend URL qo‘shish (masalan: https://zaxira-api.onrender.com)"
+                      className="form-control"
+                      style={{ fontSize: '0.85rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddBackend}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                    >
+                      <Plus size={14} /> Qo‘shish
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -484,6 +749,289 @@ export default function AdminSettings() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Tab 3: Tizim (Backend API Management) */}
+      {activeTab === 'tizim' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '850px' }}>
+          {/* Card 1: Paste & Activate another backend API */}
+          <div className="card" style={{ padding: '1.75rem', border: '2px solid var(--primary)', backgroundColor: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <Server size={22} color="var(--primary)" />
+                  <span>Yangi Backend API Manzilini Kiritish (Paste API)</span>
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+                  Istalgan yangi backend server URL manzilini bu yerga joylang (Paste). Server bilan aloqa zudlik bilan tekshiriladi va faollashtiriladi.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.1)', color: 'var(--primary)', fontWeight: '700' }}>
+                  Multi-Backend & Auto-Failover Faol
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveAndActivateBackend} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: '700', fontSize: '0.9rem' }}>
+                  Backend API URL Manzili (Paste another backend API) *
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    required
+                    value={newBackendUrl}
+                    onChange={(e) => setNewBackendUrl(e.target.value)}
+                    placeholder="Masalan: https://yangi-server.onrender.com yoki http://localhost:5000"
+                    className="form-control"
+                    style={{ fontSize: '0.95rem', padding: '0.65rem 0.9rem', fontFamily: 'monospace' }}
+                  />
+                  {navigator.clipboard && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText();
+                          if (text) {
+                            setNewBackendUrl(text.trim());
+                            showToast("Clipboard'dan havola joylandi (Pasted)!", "info");
+                          }
+                        } catch {
+                          showToast("Clipboard ruxsati berilmagan, qo'lda kiriting", "warning");
+                        }
+                      }}
+                      className="btn btn-secondary"
+                      style={{ whiteSpace: 'nowrap', fontSize: '0.85rem', padding: '0.6rem 0.9rem' }}
+                      title="Vaqtincha xotiradan joylash"
+                    >
+                      📋 Paste
+                    </button>
+                  )}
+                </div>
+                <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.35rem', display: 'block' }}>
+                  Protokol (https://) yozilmasa, tizim avtomatik ravishda xavfsiz https:// qo‘shib oladi.
+                </small>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                <button
+                  type="submit"
+                  disabled={pinging || !newBackendUrl.trim()}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}
+                >
+                  <Save size={16} />
+                  <span>{pinging ? "Tekshirilmoqda..." : "Faol Backend qilib saqlash & Ulanish"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddBackend}
+                  disabled={!newBackendUrl.trim()}
+                  className="btn btn-secondary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}
+                >
+                  <Plus size={16} />
+                  <span>Zaxira ro‘yxatiga qo‘shish</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Card 2: Current Active Backend Status */}
+          <div className="card" style={{ padding: '1.5rem', backgroundColor: 'var(--bg-secondary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: '700' }}>
+                  Hozirgi Faol Backend Server (Active API)
+                </span>
+                <div style={{ fontSize: '1.15rem', fontWeight: '800', marginTop: '0.2rem', fontFamily: 'monospace', color: 'var(--primary)', wordBreak: 'break-all' }}>
+                  {activeBackend}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {pingResults[activeBackend] && (
+                  <span
+                    style={{
+                      fontSize: '0.85rem',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      background: pingResults[activeBackend].ok ? '#dcfce7' : '#fee2e2',
+                      color: pingResults[activeBackend].ok ? '#15803d' : '#b91c1c',
+                      fontWeight: 600
+                    }}
+                  >
+                    {pingResults[activeBackend].ok ? (
+                      <>
+                        <CheckCircle2 size={15} /> Online ({pingResults[activeBackend].duration}ms)
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle size={15} /> Aloqa yo‘q
+                      </>
+                    )}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handlePingSingle(activeBackend)}
+                  disabled={pinging}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <RefreshCw size={14} className={pinging ? 'spin' : ''} /> Ping
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: All Candidate Backends (Failover List) */}
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '800' }}>Ulangan Barcha Backend Serverlar</h4>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Serverlar ustuvorlik bo‘yicha tekshiriladi. Biri javob bermasa, avtomatik keyingisiga murojaat qilinadi.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={handlePingBackends}
+                  disabled={pinging}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <RefreshCw size={14} className={pinging ? 'spin' : ''} /> Barchasini tekshirish
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetBackends}
+                  className="btn btn-outline btn-sm"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Zavod holatiga qaytarish"
+                >
+                  Qaytarish
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {backendList.map((url) => {
+                const isActive = activeBackend === url;
+                const ping = pingResults[url];
+                const isCustom = !['https://gastranom.onrender.com', 'http://localhost:5000', 'http://127.0.0.1:5000'].includes(url);
+
+                return (
+                  <div
+                    key={url}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.85rem 1.15rem',
+                      borderRadius: '8px',
+                      border: isActive ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                      backgroundColor: isActive ? 'rgba(34, 197, 94, 0.05)' : '#ffffff',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input
+                        type="radio"
+                        name="activeBackendRadio"
+                        checked={isActive}
+                        onChange={() => handleSelectBackend(url)}
+                        style={{ cursor: 'pointer', width: '17px', height: '17px' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>{url}</span>
+                          {isActive && (
+                            <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', background: 'var(--primary)', color: '#fff', fontWeight: 700 }}>
+                              FAOL
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {url.includes('onrender.com') ? 'Render Cloud Production API' : url.includes('localhost') ? 'Lokal Dev Server' : 'Maxsus kiritilgan Backend API'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      {ping && (
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: ping.ok ? '#dcfce7' : '#fee2e2',
+                            color: ping.ok ? '#15803d' : '#b91c1c',
+                            fontWeight: 600
+                          }}
+                        >
+                          {ping.ok ? (
+                            <>
+                              <CheckCircle2 size={13} /> {ping.duration}ms
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle size={13} /> Oflayn
+                            </>
+                          )}
+                        </span>
+                      )}
+
+                      {!isActive ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectBackend(url)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Ulanish
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePingSingle(url)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          <RefreshCw size={13} />
+                        </button>
+                      )}
+
+                      {isCustom && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomBackend(url)}
+                          className="btn btn-outline btn-sm"
+                          style={{ color: 'var(--danger)', padding: '0.35rem 0.6rem' }}
+                          title="Ro‘yxatdan o‘chirish"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 

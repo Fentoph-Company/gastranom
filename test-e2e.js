@@ -1,9 +1,26 @@
 // Comprehensive E2E API & Business Logic Integration Test for Gastronom Khiva
+const CANDIDATE_URLS = [
+  process.env.API_URL,
+  'https://gastranom.onrender.com/api',
+  'http://127.0.0.1:5000/api',
+  'http://localhost:5000/api'
+].filter(Boolean);
 
-const BASE_URL = 'http://127.0.0.1:5000/api';
+async function resolveWorkingBackendUrl() {
+  for (const url of CANDIDATE_URLS) {
+    try {
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        return url;
+      }
+    } catch (e) {}
+  }
+  return CANDIDATE_URLS[0];
+}
 
 async function testSuite() {
-  console.log('>>> [START] Comprehensive Gastronom Khiva E-commerce Test Suite...\n');
+  const BASE_URL = await resolveWorkingBackendUrl();
+  console.log(`>>> [START] Gastronom Khiva Test Suite connected to: ${BASE_URL}\n`);
   let passed = 0;
   let failed = 0;
 

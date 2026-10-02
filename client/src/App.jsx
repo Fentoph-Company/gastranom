@@ -148,9 +148,10 @@ function MainApp() {
         {adminTab === 'delivery' && <AdminDelivery />}
         {adminTab === 'reviews' && <AdminReviews />}
         {adminTab === 'customers' && <AdminCustomers />}
-        {adminTab === 'banners' && <AdminSettings />}
+        {adminTab === 'banners' && <AdminSettings initialTab="banners" />}
         {adminTab === 'audit-logs' && <AdminAuditLogs />}
-        {adminTab === 'settings' && <AdminSettings />}
+        {adminTab === 'settings' && <AdminSettings initialTab="settings" />}
+        {adminTab === 'system' && <AdminSettings initialTab="tizim" />}
       </AdminLayout>
     );
   }

@@ -81,9 +81,19 @@ export async function sendTelegramNotification(text) {
     const chatIdRow = db.prepare("SELECT value FROM settings WHERE key = 'telegram_chat_id'").get();
     const enabledRow = db.prepare("SELECT value FROM settings WHERE key = 'telegram_enabled'").get();
 
-    const botToken = (botTokenRow ? JSON.parse(botTokenRow.value) : '') || process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = (chatIdRow ? JSON.parse(chatIdRow.value) : '') || process.env.TELEGRAM_CHAT_ID;
-    const isEnabled = enabledRow ? JSON.parse(enabledRow.value) : 1;
+    const getSettingVal = (row, fallback = '') => {
+      if (!row || row.value === undefined || row.value === null) return fallback;
+      try {
+        const parsed = JSON.parse(row.value);
+        return parsed !== '' && parsed !== null && parsed !== undefined ? parsed : fallback;
+      } catch {
+        return row.value || fallback;
+      }
+    };
+
+    const botToken = getSettingVal(botTokenRow, process.env.TELEGRAM_BOT_TOKEN || '8857592268:AAGiB4PXMWli-Ag6s-LfBhK_hHeC4YQHWQE');
+    const chatId = getSettingVal(chatIdRow, process.env.TELEGRAM_CHAT_ID || '');
+    const isEnabled = Number(getSettingVal(enabledRow, 1)) !== 0;
 
     if (!isEnabled || !botToken || !chatId) {
       // Telegram not configured or disabled - graceful silent return
