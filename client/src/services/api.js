@@ -1,5 +1,7 @@
 // Client API service with JWT authentication and guest session support
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://gastranom.onrender.com';
+
 // Ensure guest sessionId in localStorage
 let sessionId = localStorage.getItem('gastranom_session_id');
 if (!sessionId) {
@@ -27,7 +29,8 @@ export async function request(endpoint, options = {}) {
   };
 
   try {
-    const res = await fetch(endpoint, config);
+    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+    const res = await fetch(url, config);
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
